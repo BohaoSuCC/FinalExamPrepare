@@ -472,7 +472,7 @@ corrplot(cor_matrix, method = "circle")
 names(data_test)
 ```
 
-```{r, echo=TRUE,eval=TRUE, warning=FALSE}
+```{r, echo=TRUE,eval=FALSE, warning=FALSE}
 
 columns_name_datatest <- names(data_test)[c(13,14,15,16)]
 
