@@ -26,7 +26,7 @@ knitr::opts_chunk$set(echo = TRUE,
 
 # Initial project scope
 
-```{r Packages_Loading,collapse = TRUE,message=TRUE,warning=TRUE,error=TRUE,echo=TRUE}
+```{r Packages_Loading,collapse = TRUE,echo=TRUE,eval = TRUE}
 library(broom)
 library(car)
 library(classInt)
@@ -63,7 +63,7 @@ library(tmaptools)
 
 ## Research Question:
 
--   What are the factors that might lead to variation in Average GCSE point scores across the city?
+-   What are the factors that might lead to xxxxxxxxxxxxx scores in the xxxxxxxx city?
 
 ## Hypothesis:
 
@@ -77,9 +77,10 @@ library(tmaptools)
 2.  Exploration Data Analysis(histograms and Q-Q plots for statistical information, KDE for spatial distribution, DBSCAN for spatial clustering, etc.) need to be done both for non-spatial and spatial fields. This step would clarify the simple relationship and some features inside the data.
 
 3.  Based on research purpose, the regression model also needs two important prerequisite to guarantee its adaptability and rationality.
+
     -   The first one is "The xxxxxx's happening does have summarizable and discernible spatial distribution characteristics and spatial patterns." This indicates whether a spatial analysis rather than purely quantitative analysis should be utilized to address the research question. Hence, Spatial patterns analysis like KDE or DBSCAN should be operated to check whether there is random occurrences for the xxxxxxxxxxx or not. If the result is complete random distribution, I'll just do the basic quantitative analysis based on the non-spatial data.
     -   The second one is "Spatial location information does play as a crucial and indispensable variable when building regression models." This means which regression model should be utilized to analysis and predict the xxxxxxx. I suppose spatial autocorrelation methods should be used to examine the adaptability of Tobler's Law.[@tobler_computer_1970] If there is no evidence showing geographical elements does affect the dependant variables distribution, then linear regression model or polynomial regression model should be the options. Otherwise, we should consider spatial information and select spatial regression models like spatial lag and spatial error models or geographically weighted regression models.
-  
+
 4.  Afterwards, some advanced filtering or merging should be operated based on the ESDA, after which some cleansed columns and features could be extracted from the raw data and regarded as the independent variables for regression model to test the hypothesis. The variables selection process should also take some background context and research purpose into consideration.
 
 5.  Then, modelling part should be emphasized on which model should be selected. Regression Model selection will refer to all above previous analysis and prerequisites. After establishing a baseline model, the focus shifts to evaluating and refining this model. This involves comparing the baseline model's performance against the spatial models, using metrics such as R-squared, AIC, or RMSE for validation and visualization. This process of model selection and refinement is central to achieving reliable and meaningful insights from the spatial analysis.
@@ -88,19 +89,25 @@ library(tmaptools)
 
 ## Potential Limitation of data and methods
 
--   Data Limitation[@goodchild_gis_2009]
--   
+### Data Limitation
+
+-   Issues with Spatial Scale: The spatial scale of the data (e.g., geographic extent and resolution) can affect the analysis outcomes. Different spatial scales may reveal different patterns and relationships.
+
+-   Data Quality and Completeness: The dataset may have missing or inaccurate data, leading to biased analysis results. And we will also drop part of the data due to some NAs or administrative boundaries, which will also impact on dataset's completeness.
+
+### Methods Limitation
+
+-   Non-independence of Spatial Data: Traditional non-spatial regression models often assume independence between observations, which may not hold true for spatial data. Spatial dependence between neighboring locations can impact the accuracy of the model. 
+
+-   Spatial Autocorrelation in Residuals: In many regression models, spatial autocorrelation in residuals is considered a serious violation. If residuals from the model show spatial clustering, it might indicate that key variables are missing from the model.
 
 ## RMD environment configuration
 
+Before the specific illustration and analysis procedure, some environment configuration should be down to guarantee this .RMD file's robust on various platform and devices.
+
 -   Download .bib and .csl file remotely for reference
 
-```{r Download_bib_csl, echo=TRUE, results='hide'}
-
-#'hide': 这意味着代码块的结果不会在最终文档中显示。代码执行了，但产生的结果（输出）是不可见的。
-#'asis': 这个选项会原样输出结果。如果结果是特定的Markdown或HTML代码，它会被当作文档的一部分渲染，而不是显示为代码输出。
-#'hold': 这个选项会在代码块的所有代码执行完毕后再显示所有的结果。这与默认行为（逐步显示每行代码的结果）不同。
-#'markup': 这是默认选项，它会将结果作为Markdown或HTML标记显示。
+```{r Download_bib_csl, echo=TRUE, results='markup'}
 
 # download reference.bib remotely from my github
 download.file("https://github.com/xxxxxxx.bib", 
@@ -112,9 +119,9 @@ download.file("https://raw.githubusercontent.com/BohaoSuCC/CASA0005BohaoSu/main/
 
 ```
 
--   Create Data Folder
+-   Create Data Folder for Loading and Saving Data
 
-```{r Directory_Folder, warning=FALSE, message=FALSE}
+```{r Directory_Folder}
 # create the folder storing data for a better robust
 folder_name <- "Data"
 
@@ -171,23 +178,23 @@ Londonwards<-fs::dir_info(here::here("Data",
 
 ```
 
-```{r Dataset_Reading, warning=FALSE, message=FALSE}
+```{r Dataset_Reading, warning=FALSE, message=FALSE, eval = TRUE}
 
+#Reading the csv and Add na argument to make sure csv's robust
+# replace all the nas as " "
+data_test <- read_csv(here::here("Data","Evictions_20231212.csv"), na=c(" ")) 
 
+```
 
-#列名: col_names = TRUE 表示文件的第一行包含列名，因此应该将其作为数据框的列名。
+```{r}
 
 LondonWardProfiles <- read_csv("https://data.london.gov.uk/download/ward-profiles-and-atlas/772d2d64-e8c6-46cb-86f9-e52b4c7851bc/ward-profiles-excel-version.csv", 
                                col_names = TRUE, 
                                locale = locale(encoding = 'UTF-8'))
 
-#Reading the csv and Add na argument to make sure csv's robust
-# replace all the nas as " "
-evictions_points <- read_csv(here::here("Data","Evictions_20231212.csv"), na=c(" ")) 
 
 #Reading the shp file
 community_areas <- st_read(here::here("Data","geo_export_7fdf694c-62dd-4de4-8f17-0b5ca2408993.shp"))
-
 ```
 
 ## Data Description
@@ -197,10 +204,10 @@ community_areas <- st_read(here::here("Data","geo_export_7fdf694c-62dd-4de4-8f17
 
 ## NA values
 
--   In my datset, the NA values could probably mean the missed data, unrecorded observations, inapplicable data points, etc.
+In the dataset, the NA values could probably mean the missed data, unrecorded observations, inapplicable data points, etc.
 
 ```{r check_NA}
-#检查所有列是否正常读取check all of the columns have been read in correctly
+#check all of the columns have been read in correctly
 Column_type_list <- evictions_points %>% 
   summarise_all(class) %>%
   pivot_longer(everything(), 
@@ -215,16 +222,17 @@ Column_NA_ratio_list <- evictions_points %>%
                names_to="All_variables", 
                values_to="Variable_NA_ratio")
 
-# 检查空间数据的信息及CRS 
+# check the CRS and any error within spatial data
 st_geometry(BoroughMap)
 
 Column_type_list
 Column_NA_count_list
 ```
 
--   From the statistical chart we could see there are totally xxxx rows(observations) containing NAs values. Technically, I don't think it is a high rate and these NA values could have a significant impact on my analysis.
+From the statistical chart we could see there are totally xxxx rows(observations) containing NAs values. Technically, I don't think it is a high rate and these NA values could have a significant impact on my analysis.
 
--   Also, I am going to consider how to deal with those NA values with different solutions according to each column's role during my analysis. Some columns, such as xxxxxxxxxx, are extremely important that we couldn't extract any useful information if there are NA values. Besides, its high accuracy makes it harder to fill missing values, which leads us to nothing else but to drop them. Some of the columns, such like xxxx and some categorical data, we also could classify all the NA values as a new category. Some columns like xxxxxxxxxx, we could assume, based on the context of the study and common sense, that the missing values are 0. Although this approach may introduce some degree of inaccuracy, it is considered a practical solution since the proportion of NA values in these columns is very high. Therefore, dropping these columns outright would be an unwise decision.
+Also, I am going to consider how to deal with those NA values with different solutions according to each column's role during my analysis. Anyway, the specific solutions to these NA values should align with research question and analysis requirement, so the detailed Data processing would be demonstrated in Data Cleaning and Processing.
+
 
 ## Accuracy and Biasing
 
@@ -251,9 +259,11 @@ sf_DATA_transformed <- st_transform(sf_DATA, crs = 32650)
 
 -   Moreover, the impact of using [specify CRS] on my spatial analysis, especially in GWR where a spatial weight matrix really matters, is significant. And that requires distance measurement should be calculated, demonstrated and visualized precisely. Using projected CRS, I believe, should be a better choice for visualization, especially for some local-scale analysis and maps.
 
-# DATA Cleaning and Processing
+# Data Cleaning and Processing 
 
 ## Dealing with NAs in spatial and non-spatial dataset
+
+Some columns, such as xxxxxxxxxx, are extremely important that we couldn't extract any useful information if there are NA values. Besides, its high accuracy makes it harder to fill missing values, which leads us to nothing else but to drop them. Some of the columns, such like xxxx and some categorical data, we also could classify all the NA values as a new category. Some columns like xxxxxxxxxx, we could assume, based on the context of the study and common sense, that the missing values are 0. Although this approach may introduce some degree of inaccuracy, it is considered a practical solution since the proportion of NA values in these columns is very high. Therefore, dropping these columns outright would be an unwise decision.
 
 ```{r Deal_NA_nonspatial, results='markup'}
 # na.omit(): 从数据中删除含有 NA 的行。
@@ -299,6 +309,8 @@ DATA_cleaned <- DATA %>%
 
 ## Converting Datatype
 
+And we will also convert some columns into specific datatype for more covenient processing.
+
 ```{r}
 # as.numeric(): 将数据转换为数值类型。
 # 参数：x（输入数据）。
@@ -315,19 +327,23 @@ DATA$COLUMN <- as.character(DATA$COLUMN)
 #默认参数：format = "%Y-%m-%d"。
 DATA$date_COLUMN <- as.Date(DATA$date_COLUMN, format = "%Y-%m-%d")
 
+DATA <- DATA %>%
+  mutate(COLUMN = str_replace_all(COLUMN, "\\$", "")) %>% # remove dollar sign
+  mutate(COLUMN = str_replace_all(COLUMN, ",", "")) %>%  # remove the comma
+  mutate(COLUMN = as.numeric(COLUMN))  
+
 ```
 
 ## Delete or Filter outliers
 
 ```{r}
-#dplyr::filter()
+#select all spatial feature with the city boundary and transorm its CRS
 BoroughMap <- LondonBoroughs %>%
   dplyr::filter(str_detect(GSS_CODE, "^E09"))%>%
   st_transform(., 27700)
 
-#dplyr::filter(): 根据条件删除行。
-#参数：.DATA（数据框），...（条件表达式）。
-#默认参数：无默认参数
+#delete specific rows by filter and some arguments
+
 DATA_cleaned <- DATA %>% 
   dplyr::filter(COLUMN >= lower_limit, COLUMN <= upper_limit)
 
@@ -335,7 +351,7 @@ DATA_cleaned <- DATA %>%
 BluePlaquesSub <- BluePlaques[BoroughMap, , op=st_within]
 # to identify points completely within the borough outline, or a variety of other options such as st_overlaps, st_touches, st_contains, st_disjoint
 
-#check to see that they've been removed
+# plot the map to check to see that they've been removed
 tmap_mode("plot")
 tm_shape(BoroughMap) +
   tm_polygons(col = NA, alpha = 0.5) +
@@ -367,6 +383,10 @@ DATA$column <- str_trim(DATA$column)
 ## Dealing with Repetitive or Unique rows
 
 ```{r}
+
+# make sure there is no more repetitive rows in the data
+BluePlaques <- distinct(BluePlaques)
+
 #duplicated(): 检测重复行。
 #参数：x（输入数据）。
 #默认参数：无默认参数。
@@ -377,22 +397,13 @@ DATA_cleaned <- DATA[!duplicated(DATA), ]
 #默认参数：无默认参数。
 DATA_cleaned <- unique(DATA)
 
-#dplyr包的内容
-BluePlaques <- distinct(BluePlaques)
 ```
 
 ## DATA Integration 数据整合
 
 ```{r}
-#函数：dplyr::left_join(), dplyr::full_join(), 等
-
-#dplyr::left_join(): 左连接两个数据框。
-#参数：x（第一个数据框），y（第二个数据框），by（连接的键）。
-#默认参数：by = NULL。
 
 # 两个non-spatial数据之间，还有inner_join,right_join,full_join
-# semi_join：仅保留左边数据框中有对应匹配项的行。不包括右边数据框的任何列，只是用于过滤左边数据框的行。
-# anti_join：保留左边数据框中没有在右边数据框找到匹配项的行。同样，不包括右边数据框的任何列，只是用于排除左边数据框的特定行。
 DATA_combined <- left_join(DATA1, DATA2, by = c('SAME_COLUMN_NAME'='SAME_COLUMN_NAME'))
 
 # spatial data join。 Argument could be 
@@ -402,11 +413,28 @@ result <- st_join(x, y, op = st_intersects)
 
 # Exploration Spatial Data Analysis (ESDA)
 
-## Distribution and coorelationship单个图
+Exploration Spatial Data Analysis (ESDA) plays an significant role in spatial regression modeling, primarily focusing on three key aspects. 
+-   First part contains acquiring statistical characteristics and distribution patterns of all non-spatial data, providing a solid foundation for selecting relevant independent variables for the model. This step is crucial for understanding the underlying structure and relationships within the data. 
+-   Second part involves cluster analysis to ascertain if the data exhibits spatial clustering, indicating non-random distribution across the space. This analysis verifies one of the prerequisites for spatial regression modeling, ensuring the data's suitability for such analysis. 
+-   Another essential prerequisite will be checked in part3, which is the impact of geographical spatial differences on certain dependent variables in spatial data. This is accomplished by conducting spatial autocorrelation analysis, which helps to confirm if spatial factors significantly influence the variables in question, thereby validating the use of spatial regression techniques.
+
+## Distribution and coorelationship
+```{r, echo=TRUE,eval=TRUE, warning=FALSE}
+data_test$Latitude <- as.numeric(data_test$Latitude)
+
+clean_data <- data_test %>%
+  filter_all(all_vars(!is.na(.)))
+```
+
+```{r,}
+ggplot(clean_data, aes(x = Latitude)) + 
+  geom_histogram(binwidth = 0.01, fill = "blue", color = "black", alpha=0.5)
+
+```
 
 ```{r, results='hold'}
 # 绘制var1的直方图
-ggplot(data, aes(x = var1)) + 
+ggplot(data_test, aes(x = Latitude)) + 
   geom_histogram(binwidth = 1, fill = "blue", color = "black")
 
 # 绘制var1和var2之间的散点图
@@ -440,46 +468,49 @@ corrplot(cor_matrix, method = "circle")
 ```
 
 ## Several Histograms 多个图合并
+```{r, echo=TRUE,eval=TRUE, warning=FALSE}
+names(data_test)
+```
 
-```{r}
-# 假设你的数据框架是data，并且有16个列
-# 创建一个空列表来存储每个直方图
+```{r, echo=TRUE,eval=TRUE, warning=FALSE}
+
+columns_name_datatest <- names(data_test)[c(13,14,15,16)]
+
+# create a new list to save every histogram
 plots_list <- list()
 
-# 对每个列创建一个直方图，并将其添加到列表中
-for (i in 1:16) {
-  column_name <- names(data)[i]
-  p <- ggplot(data, aes_string(x = column_name)) + 
-    geom_histogram(binwidth = 1, fill = "blue", color = "black") +
-    ggtitle(paste("Histogram of", column_name))   #每个图的图名
-  plots_list[[i]] <- p
+#ggplot(clean_data, aes(x = Latitude)) + 
+  #geom_histogram(binwidth = 0.05, fill = "blue", color = "black", alpha=0.5)
+
+# create a histogram towards every column and add it into the plot list
+for (i in 1:4) {
+  column_name <- columns_name_datatest[i]
+  pic <- ggplot(data_test, aes(x = !!sym(column_name))) + 
+    geom_histogram(fill = "lightblue", color = "black") +
+    ggtitle(paste("Histogram of", column_name)) +   #每个图的图名
+    xlab(paste("X-axis of", column_name)) +  # 设置X轴标题
+    ylab("Frequency") +  # 设置Y轴标题为“频率”
+    theme(
+      plot.title = element_text(size = 10),  # 设置图表标题字体大小
+      axis.title.x = element_text(size = 8),  # 设置X轴标题字体大小
+      axis.title.y = element_text(size = 8)   # 设置Y轴标题字体大小
+    )
+  plots_list[[i]] <- pic
 }
 
-# 使用patchwork将所有直方图组合成一个4x4网格
-combined_plot <- wrap_plots(plots_list, ncol = 4)
+# using patchwork to combine every histograms into a 2*2 grids
+combined_plot <- wrap_plots(plots_list, ncol = 2) & 
+  theme(plot.title = element_text(size = 10),
+    axis.title.x = element_text(size = 8),
+    axis.title.y = element_text(size = 8)
+  )
+
 combined_plot
 ```
 
-## Quantile-Quantile Plot Q-Q图
-
-```{r}
-#  Q-Q图是检查数据是否近似正态分布的一个强有力工具。
-# 如果数据点大致沿着参考线排列，则数据接近正态分布。
-
-# Create the dataframe for normal distribution reference创建数据框
-data <- rnorm(100) # using the normal distribution random generated numbers.
-df <- data.frame(sample = data)
-
-# 使用 ggplot2 绘制Q-Q图
-ggplot(df, aes(sample = sample)) +
-  stat_qq() +
-  stat_qq_line(col = "red") +
-  ggtitle("Q-Q Plot") +
-  xlab("Theoretical Quantiles") +
-  ylab("Sample Quantiles")
-```
-
 ## Spatial Distribution 查看空间分布
+
+In order to understand the spatial distribution, I utilized Kernel Density Estimation (KDE) for its analysis. This method could provide with an in-depth examination of \_\_\_\_\_\_\_\_\_\_ (specific aspect or feature of the data), enabling a clearer visualization of spatial concentration and patterns within the study area. The KDE plot is particularly effective in highlighting areas of high density or clustering, which is essential for the analysis of \_\_\_\_\_\_\_\_\_\_ (specific phenomena or geographic feature).
 
 ```{r Spatial_Scatter_plot}
 
@@ -507,10 +538,9 @@ ggplot(df, aes(x = longitude, y = latitude)) +
   theme_minimal()
 ```
 
--   From the KDE plot we could see xxxxxxxxxxxxxxxxxxxxxxxxxxx
+-   From the KDE (Kernel Density Estimation) plot, we can observe \_\_\_\_\_\_\_\_\_\_. This suggests that the distribution of data exhibits a trend of \_\_\_\_\_\_\_\_\_\_, which is crucial for understanding \_\_\_\_\_\_\_\_\_\_ (specific data characteristic or geographic feature). Particularly in the region of \_\_\_\_\_\_\_\_\_\_, this distribution provides key insights into \_\_\_\_\_\_\_\_\_\_ (a relevant phenomenon or issue)."
 
 ## Spatial Patterns 查看空间模式（如聚集、离散）
-
 
 ```{r}
 
@@ -690,8 +720,30 @@ Establishing a spatial baseline model typically refers to creating a basic regre
 #使用网格搜索（Grid Search）或随机搜索（Random Search）来找到最佳参数。
 ```
 
-## 残差分析
+## Residuals Analysis 残差分析
 
+
+In spatial regression models, ensuring that residuals are normally distributed is important because many statistical inferences (like tests for the significance of parameters) are based on the assumption of normality. If residuals are not normally distributed, this can affect the reliability of the model and the validity of the conclusions. Therefore, using a Q-Q plot to examine the normality of residuals in spatial regression models is a crucial step in model diagnostics.
+
+```{r}
+#  A Q-Q plot is a common method to check if data follows a normal distribution. In a Q-Q plot of a standard normal distribution, if the data points roughly fall along a straight line, it suggests that the data are approximately normally distributed.
+# Identifying Outliers: The Q-Q plot can also help identify outliers in the data. Data points that deviate significantly from the line may indicate outliers.
+
+# Create the dataframe for normal distribution reference
+data <- rnorm(100) # using the normal distribution random generated numbers.
+df <- data.frame(sample = data)
+
+ggplot(df, aes(sample = sample)) +
+  stat_qq() +
+  stat_qq_line(col = "red") +
+  ggtitle("Q-Q Plot") +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles")
+
+```
+
+
+###
 ```{r}
 #特别在回归模型中，检查残差是否呈现随机分布。 
 ```
