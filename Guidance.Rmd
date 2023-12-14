@@ -1,0 +1,679 @@
+---
+title: "Guidance"
+author: "BohaoSu"
+date: "2023-12-13"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    citation_package: natbib
+    toc: TRUE
+    number_sections: TRUE
+    toc_depth: 2
+header-includes:
+  - \usepackage{setspace}
+  - \setstretch{1.5}
+  - \usepackage{fontspec}
+  - \setmainfont{Spectral}
+  - \setsansfont{Roboto}
+  - \setmonofont{JetBrainsMono-Regular}
+geometry: "top=25mm, left=40mm, right=30mm, bottom=25mm, heightrounded"
+linkcolor: blue
+highlight-style: github
+bibliography: "reference.bib"
+csl: "ucl-institute-of-education-harvard.csl"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      eval = FALSE,
+                      warning = interactive(), 
+                      message = interactive(), 
+                      error = TRUE)
+```
+
+# Initial project scope
+
+```{r Packages_Loading,collapse = TRUE,message=TRUE,warning=TRUE,error=TRUE,echo=TRUE}
+library(broom)
+library(car)
+library(classInt)
+library(corrplot)
+library(crosstalk)
+library(DiagrammeR)
+library(dplyr)
+library(fs)
+library(geojsonio)
+library(ggplot2)
+library(ggmap)
+library(here)
+library(janitor)
+library(maptools)
+library(mapview)
+library(OpenStreetMap)
+library(patchwork)
+library(plotly)
+library(RColorBrewer)
+library(readr)
+library(rJava)
+library(rgdal)
+library(RSQLite)
+library(rgeos)
+library(sf)
+library(sp)
+library(spatstat)
+library(spdep)
+library(stringr)
+library(tidyverse)
+library(tmap)
+library(tmaptools)
+```
+
+## Research Question:
+
+ccclx. What are the factors that might lead to variation in Average GCSE point scores across the city?
+
+## Hypothesis:
+
+-   Null hypothesis: There is complete spatial randomness. No statistical significance exists in a set of given observations. There is no pattern - i.e. complete spatial randomness - in our data. There is no relationship between exam scores and other observed variables across London.
+-   Alternative hypothesis: Our data does exhibit a pattern.
+
+## Methodology:
+
+1.  The first step is always cleaning and pre-processing data, which is the foundation for any kinds of analysis and modelling.
+2.  Exploration Data Analysis(histograms and Q-Q plots for statistical information, KDE for spatial distribution, DBSCAN for spatial clustering, etc.) need to be done both for non-spatial and spatial fields. This step would clarify the simple relationship and some features inside the data.
+3.  Based on research purpose, the regression model also needs two important prerequisite to guarantee its adaptability and rationality.
+    -   The first one is "The xxxxxx's happening does have summarizable and discernible spatial distribution characteristics and spatial patterns." This indicates whether a spatial analysis rather than purely quantitative analysis should be utilized to address the research question. Hence, Spatial patterns analysis like KDE or DBSCAN should be operated to check whether there is random occurrences for the xxxxxxxxxxx or not. If the result is complete random distribution, I'll just do the basic quantitative analysis based on the non-spatial data.
+    -   The second one is "Spatial location information does play as a crucial and indispensable variable when building regression models." This means which regression model should be utilized to analysis and predict the xxxxxxx. I suppose spatial autocorrelation methods should be used to examine the adaptability of Tobler's Law.[@tobler_computer_1970] If there is no evidence showing geographical elements does affect the dependant variables distribution, then linear regression model or polynomial regression model should be the options. Otherwise, we should consider spatial information and select spatial regression models like spatial lag and spatial error models or geographically weighted regression models.
+4.  Afterwards, some advanced filtering or merging should be operated based on the ESDA, after which some cleansed columns and features could be extracted from the raw data and regarded as the independent variables for regression model to test the hypothesis. The variables selection process should also take some background context and research purpose into consideration.
+5.  Then, modelling part should be emphasized on which model should be selected. Regression Model selection will refer to all above previous analysis and prerequisites. After establishing a baseline model, the focus shifts to evaluating and refining this model. This involves comparing the baseline model's performance against the spatial models, using metrics such as R-squared, AIC, or RMSE for validation and visualization. This process of model selection and refinement is central to achieving reliable and meaningful insights from the spatial analysis.
+6.  At the End, all results and features would be generalized and summarized, and a primary research conclusion will be drawn towards the initial question.
+
+## Potential Limitation of data and methods
+-   Data Limitation[@goodchild_gis_2009]
+-   
+
+## RMD environment configuration
+-   Download .bib and .csl file remotely for reference
+```{r Download_bib_csl, echo=TRUE, results='hide'}
+
+#'hide': 这意味着代码块的结果不会在最终文档中显示。代码执行了，但产生的结果（输出）是不可见的。
+#'asis': 这个选项会原样输出结果。如果结果是特定的Markdown或HTML代码，它会被当作文档的一部分渲染，而不是显示为代码输出。
+#'hold': 这个选项会在代码块的所有代码执行完毕后再显示所有的结果。这与默认行为（逐步显示每行代码的结果）不同。
+#'markup': 这是默认选项，它会将结果作为Markdown或HTML标记显示。
+
+# download reference.bib remotely from my github
+download.file("https://github.com/xxxxxxx.bib", 
+              destfile=here::here("reference.bib"))
+
+# download reference.bib remotely from my github
+download.file("https://raw.githubusercontent.com/BohaoSuCC/CASA0005BohaoSu/main/ucl-institute-of-education-harvard.csl", 
+              destfile=here::here("ucl-institute-of-education-harvard.csl"))
+
+```
+
+-   Create Data Folder
+```{r Directory_Folder, warning=FALSE, message=FALSE}
+# create the folder storing data for a better robust
+folder_name <- "Data"
+
+# get the root dir
+root_dir <- here::here()
+
+# construct the full path
+folder_path <- file.path(root_dir, folder_name)
+
+# check if the folder already exists
+if (!dir.exists(folder_path)) {
+  dir.create(folder_path)
+  message("Folder '", folder_name, "' created at ", folder_path)
+} else {
+  message("Folder '", folder_name, "' already exists at ", folder_path)
+}
+
+```
+
+# Data Introduction
+
+## Downloading, Unzipping and loading the data
+
+```{r Dataset_DownLoading, warning=FALSE, message=FALSE}
+
+#Downloading the relating files and save and unzip it.
+download.file("https://data.london.gov.uk/download/statistical-gis-boundary-files-london/9ba8c833-6370-4b11-abdc-314aa020d5e0/statistical-gis-boundaries-london.zip", 
+              destfile=here::here("Data","statistical-gis-boundaries-london.zip"))
+
+```
+
+```{r Dataset_Unzipping, warning=FALSE, message=FALSE}
+
+listfiles<-dir_info(here::here("Data")) %>%
+  dplyr::filter(str_detect(path, "london.zip")) %>%
+  dplyr::select(path)%>%
+  pull()%>%
+  #print out the .gz file
+  print()%>%
+  as.character()%>%
+  utils::unzip(exdir=here::here("Data"))
+
+# reading the shp
+Londonwards<-fs::dir_info(here::here("Data", 
+                                 "statistical-gis-boundaries-london", 
+                                 "ESRI"))%>%
+  #$ means exact match
+  dplyr::filter(str_detect(path, 
+                           "London_Ward_CityMerged.shp$"))%>%
+  dplyr::select(path)%>%
+  dplyr::pull()%>%
+  #read in the file in
+  sf::st_read()
+
+```
+
+```{r Dataset_Reading, warning=FALSE, message=FALSE}
+
+
+
+#列名: col_names = TRUE 表示文件的第一行包含列名，因此应该将其作为数据框的列名。
+
+LondonWardProfiles <- read_csv("https://data.london.gov.uk/download/ward-profiles-and-atlas/772d2d64-e8c6-46cb-86f9-e52b4c7851bc/ward-profiles-excel-version.csv", 
+                               col_names = TRUE, 
+                               locale = locale(encoding = 'UTF-8'))
+
+#Reading the csv and Add na argument to make sure csv's robust
+# replace all the nas as " "
+evictions_points <- read_csv(here::here("Data","Evictions_20231212.csv"), na=c(" ")) 
+
+#Reading the shp file
+community_areas <- st_read(here::here("Data","geo_export_7fdf694c-62dd-4de4-8f17-0b5ca2408993.shp"))
+
+```
+
+## Data Description
+
+-   The dataset is mainly about xxxxxxxxxxxx, containing xxxxxxxxxxxxxxx in New York city. It is collected by xxxxxx and xxxx through xxxxx and published in the [xxxx's website](https://www.openai.com/).
+-   Another data is xxxxx.shp, containing geographical information features about xxxxxxxx in xxxx city, which is published by xxxxx and can be public accessed through [xxxx's website](https://www.openai.com/).
+
+## NA values
+
+-   In my datset, the NA values could probably mean the missed data, unrecorded observations, inapplicable data points, etc.
+
+```{r check_NA}
+#检查所有列是否正常读取check all of the columns have been read in correctly
+Column_type_list <- evictions_points %>% 
+  summarise_all(class) %>%
+  pivot_longer(everything(), 
+               names_to="All_variables", 
+               values_to="Variable_class")
+total_rows <- nrow(evictions_points)
+
+#get the na values proportion of each column
+Column_NA_ratio_list <- evictions_points %>% 
+  summarise_all(~sum(is.na(.))/total_rows) %>%
+  pivot_longer(everything(), 
+               names_to="All_variables", 
+               values_to="Variable_NA_ratio")
+
+# 检查空间数据的信息及CRS 
+st_geometry(BoroughMap)
+
+Column_type_list
+Column_NA_count_list
+```
+
+-   From the statistical chart we could see there are totally xxxx rows(observations) containing NAs values. Technically, I don't think it is a high rate and these NA values could have a significant impact on my analysis.
+
+-   Also, I am going to consider how to deal with those NA values with different solutions according to each column's role during my analysis. Some columns, such as xxxxxxxxxx, are extremely important that we couldn't extract any useful information if there are NA values. Besides, its high accuracy makes it harder to fill missing values, which leads us to nothing else but to drop them. Some of the columns, such like xxxx and some categorical data, we also could classify all the NA values as a new category. Some columns like xxxxxxxxxx, we could assume, based on the context of the study and common sense, that the missing values are 0. Although this approach may introduce some degree of inaccuracy, it is considered a practical solution since the proportion of NA values in these columns is very high. Therefore, dropping these columns outright would be an unwise decision.
+
+## Accuracy and Biasing
+
+-   Due to the absence of some accuracy information such as measurement errors, data validation processes, etc, I will focus on the biases of the data. According to the description on the website [xxxx's website](https://www.openai.com/), the purpose of collecting these data is mainly to xxxxxxxxxxxxxxxxxxxx, which might bring about the biases of not xxxxxxxxxxxxxxxxxxxxxxxxx. However, I do not think this kind of biases will bring obvious and significant impact on analysis results and conclusions, even though the data collection methods do have limitation which I would elaborate detailedly afterwards.
+
+## Coordinate Reference System (CRS)
+
+-   Explain the coordinate reference system used in the data, including its type (such as geographic or projected coordinate system) and specific name (like WGS 84, UTM, etc.).
+
+```{r}
+# transform the non-spatial data into spatial data based on columns'Longitude''Latitude'
+Airbnb <- read_csv("prac5_data/listings.csv") %>%
+  st_as_sf(., coords = c("longitude", "latitude"), 
+                   crs = 4326) %>%
+    st_transform(., 27700)%>%
+    # After, do some relavant filter for the useful info
+    filter(room_type == 'Entire home/apt' & availability_365 =='365')
+
+# Transform the CRS
+sf_DATA_transformed <- st_transform(sf_DATA, crs = 32650)
+```
+
+-   In this analysis, we have selected the [specify CRS, e.g., WGS 84, EPSG:4326] as our Coordinate Reference System (CRS). This CRS aligns well with our study's geographic scope that includes [mention the geographical extent, e.g., multiple countries, global analysis, etc.].
+
+-   Moreover, the impact of using [specify CRS] on my spatial analysis, especially in GWR where a spatial weight matrix really matters, is significant. And that requires distance measurement should be calculated, demonstrated and visualized precisely. Using projected CRS, I believe, should be a better choice for visualization, especially for some local-scale analysis and maps.
+
+# DATA Cleaning and Processing
+
+## Dealing with NAs in spatial and non-spatial dataset
+
+```{r Deal_NA_nonspatial}
+# na.omit(): 从数据中删除含有 NA 的行。
+# 参数：object（数据对象）。
+# 默认参数：无默认参数。
+library(dplyr)
+DATA_cleaned <- na.omit(DATA)
+
+# dplyr::filter(): 删除特定条件下的行。
+# 参数：.DATA（数据框），...（条件表达式）。
+# 默认参数：无默认参数。
+DATA_cleaned <- DATA %>% 
+  dplyr::filter(!is.na(COLUMN_name))
+
+# tidyr::replace_na(): 用特定值替换 NA。
+# 参数：DATA（数据框），replace（用于替换的值）。
+# 默认参数：无默认参数。
+DATA_cleaned <- DATA %>% 
+  replace_na(list(COLUMN = replacement_value))
+
+```
+
+```{r Deal_NA_spatial}
+# na.omit(): 从数据中删除含有 NA 的行。
+# 参数：object（数据对象）。
+# 默认参数：无默认参数。
+library(dplyr)
+DATA_cleaned <- na.omit(DATA)
+
+# dplyr::filter(): 删除特定条件下的行。
+# 参数：.DATA（数据框），...（条件表达式）。
+# 默认参数：无默认参数。
+DATA_cleaned <- DATA %>% 
+  dplyr::filter(!is.na(COLUMN_name))
+
+# tidyr::replace_na(): 用特定值替换 NA。
+# 参数：DATA（数据框），replace（用于替换的值）。
+# 默认参数：无默认参数。
+DATA_cleaned <- DATA %>% 
+  replace_na(list(COLUMN = replacement_value))
+
+```
+
+## Converting Datatype
+
+```{r}
+# as.numeric(): 将数据转换为数值类型。
+# 参数：x（输入数据）。
+# 默认参数：无默认参数。
+DATA$COLUMN <- as.numeric(DATA$COLUMN)
+
+#as.character(): 将数据转换为字符类型。
+#参数：x（输入数据）。
+#默认参数：无默认参数。
+DATA$COLUMN <- as.character(DATA$COLUMN)
+
+#as.Date(): 将数据转换为日期类型。
+#参数：x（输入数据），format（日期格式）。
+#默认参数：format = "%Y-%m-%d"。
+DATA$date_COLUMN <- as.Date(DATA$date_COLUMN, format = "%Y-%m-%d")
+
+```
+
+## Delete or Filter outliers
+
+```{r}
+#dplyr::filter()
+BoroughMap <- LondonBoroughs %>%
+  dplyr::filter(str_detect(GSS_CODE, "^E09"))%>%
+  st_transform(., 27700)
+
+#dplyr::filter(): 根据条件删除行。
+#参数：.DATA（数据框），...（条件表达式）。
+#默认参数：无默认参数
+DATA_cleaned <- DATA %>% 
+  dplyr::filter(COLUMN >= lower_limit, COLUMN <= upper_limit)
+
+# only remain points which inside the boundary
+BluePlaquesSub <- BluePlaques[BoroughMap, , op=st_within]
+# to identify points completely within the borough outline, or a variety of other options such as st_overlaps, st_touches, st_contains, st_disjoint
+
+#check to see that they've been removed
+tmap_mode("plot")
+tm_shape(BoroughMap) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(BluePlaquesSub) +
+  tm_dots(col = "blue")
+
+```
+
+## Data Format Normalization 数据格式标准化
+
+```{r}
+#tolower(): 将文本转换为小写。
+#参数：x（输入文本）。
+#默认参数：无默认参数。
+DATA$column <- tolower(DATA$column)
+
+#toupper(): 将文本转换为大写。
+#参数：x（输入文本）。
+#默认参数：无默认参数。
+DATA$column <- toupper(DATA$column)
+
+#str_trim(): 去除文本两侧的空格（stringr 包）。
+#参数：string（输入文本），side（修剪的方向）。
+#默认参数：side = "both"。
+DATA$column <- str_trim(DATA$column)
+
+```
+
+## Dealing with Repetitive or Unique rows
+
+```{r}
+#duplicated(): 检测重复行。
+#参数：x（输入数据）。
+#默认参数：无默认参数。
+DATA_cleaned <- DATA[!duplicated(DATA), ]
+
+#unique(): 获取唯一行。
+#参数：x（输入数据）。
+#默认参数：无默认参数。
+DATA_cleaned <- unique(DATA)
+
+#dplyr包的内容
+BluePlaques <- distinct(BluePlaques)
+```
+
+## Check Geometric Integrity of Spatial Objects确保空间对象的几何完整性，处理可能存在的几何错误。
+
+```{r}
+
+```
+
+## DATA Integration 数据整合
+
+```{r}
+#函数：dplyr::left_join(), dplyr::full_join(), 等
+
+#dplyr::left_join(): 左连接两个数据框。
+#参数：x（第一个数据框），y（第二个数据框），by（连接的键）。
+#默认参数：by = NULL。
+
+# 两个non-spatial数据之间，还有inner_join,right_join,full_join
+# semi_join：仅保留左边数据框中有对应匹配项的行。不包括右边数据框的任何列，只是用于过滤左边数据框的行。
+# anti_join：保留左边数据框中没有在右边数据框找到匹配项的行。同样，不包括右边数据框的任何列，只是用于排除左边数据框的特定行。
+DATA_combined <- left_join(DATA1, DATA2, by = c('SAME_COLUMN_NAME'='SAME_COLUMN_NAME'))
+
+# spatial data join。 Argument could be 
+result <- st_join(x, y, op = st_intersects)
+
+```
+
+# Exploration Spatial Data Analysis (ESDA)
+
+## Distribution and coorelationship单个图
+
+```{r}
+# 绘制var1的直方图
+ggplot(data, aes(x = var1)) + 
+  geom_histogram(binwidth = 1, fill = "blue", color = "black")
+
+# 绘制var1和var2之间的散点图
+ggplot(data, aes(x = var1, y = var2)) + 
+  geom_point()
+
+# 箱子图-假设你的数据框架是data，列名为num_var
+ggplot(data, aes(y = num_var)) + 
+    geom_boxplot(fill = "lightblue", color = "blue")
+
+# 条形图（Bar charts）条形图用于显示分类变量的频率。
+ggplot(data, aes(x = cat_var)) + 
+    geom_bar(fill = "lightgreen", color = "darkgreen")
+
+# 计算cormatrix----假设你的数据框架是data，选择其中的几个数值型列
+numeric_data <- data[c("num_var1", "num_var2", "num_var3")]
+# 计算相关系数矩阵
+cor_matrix <- cor(numeric_data)
+# 绘制相关系数矩阵
+corrplot(cor_matrix, method = "circle")
+#这段代码首先计算了numeric_data中数值型变量的相关系数矩阵，
+#然后使用corrplot()函数绘制出相关系数矩阵。
+#method = "circle"表示使用圆圈的方式来表示相关系数的大小和方向。
+#"circle"：使用圆圈，圆圈越大，相关性越强；颜色通常用来表示正负相关。
+#"square"：与 "circle" 类似，但使用正方形来表示相关系数。
+#"ellipse"：使用椭圆形状，椭圆的形状和方向表示相关性的强度和方向。
+#"number"：直接在每个格子中显示相关系数的数值。
+#"shade"：通过阴影深浅来表示相关系数的大小，通常不显示相关系数的具体数值。
+#"color"：仅通过颜色来表示相关系数的大小和方向，类似于热图。
+#"pie"：使用饼图来表示相关系数，饼图的大小和填充比例反映相关性的强度和方向。
+```
+
+## Several Histograms 多个图合并
+
+```{r}
+# 假设你的数据框架是data，并且有16个列
+# 创建一个空列表来存储每个直方图
+plots_list <- list()
+
+# 对每个列创建一个直方图，并将其添加到列表中
+for (i in 1:16) {
+  column_name <- names(data)[i]
+  p <- ggplot(data, aes_string(x = column_name)) + 
+    geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+    ggtitle(paste("Histogram of", column_name))   #每个图的图名
+  plots_list[[i]] <- p
+}
+
+# 使用patchwork将所有直方图组合成一个4x4网格
+combined_plot <- wrap_plots(plots_list, ncol = 4)
+combined_plot
+```
+
+## Quantile-Quantile Plot Q-Q图
+
+```{r}
+#  Q-Q图是检查数据是否近似正态分布的一个强有力工具。
+# 如果数据点大致沿着参考线排列，则数据接近正态分布。
+
+# Create the dataframe for normal distribution reference创建数据框
+data <- rnorm(100) # using the normal distribution random generated numbers.
+df <- data.frame(sample = data)
+
+# 使用 ggplot2 绘制Q-Q图
+ggplot(df, aes(sample = sample)) +
+  stat_qq() +
+  stat_qq_line(col = "red") +
+  ggtitle("Q-Q Plot") +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles")
+```
+
+## Spatial Distribution 查看空间分布
+
+```{r Spatial_Scatter_plot}
+
+ggplot(DATAFRAME, aes(x = longitude, y = latitude)) + 
+  geom_point() + 
+  theme_minimal() + 
+  labs(x = "Longitude", y = "Latitude", title = "Spatial Scatter Plot")
+```
+
+```{r Spatial_Heatmaps}
+ggplot(df, aes(x = longitude, y = latitude)) + 
+  stat_density_2d(aes(fill = ..level..), geom = "polygon") + 
+  scale_fill_viridis_c() + 
+  labs(x = "Longitude", y = "Latitude", title = "Spatial Heatmap") +
+  theme_minimal()
+```
+
+```{r KDE}
+ggplot(df, aes(x = longitude, y = latitude)) + 
+  stat_density_2d(aes(fill = ..level..), geom = "polygon") + 
+  scale_fill_viridis_c() + 
+  labs(x = "Longitude", y = "Latitude", title = "Spatial Heatmap") +
+  theme_minimal()
+```
+
+-   From the scatter plot we
+
+## Spatial Patterns 查看空间模式（如聚集、离散）
+
+```{r}
+
+
+```
+
+## Spatial Autocorrelation 空间自相关性
+
+```{r}
+
+
+```
+
+# Variables Selection 特征选择与工程
+
+## Selecting Independent Variables based on ESDA and Research Question
+
+统计方法：例如使用相关系数或卡方检验来识别与目标变量最相关的特征。 模型基方法：如使用随机森林或LASSO回归进行特征重要性评估。 递归特征消除：这是一种利用模型精度来选择特征的方法。 特征工程：转换和创建新特征来改善模型的性能。常见的做法包括：
+
+## DATA Normalization and Standardlization 数据规范化与标准化
+
+```{r}
+# 数据规范化
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+DATA_normalized <- as.DATA.frame(lapply(DATA, normalize))
+
+#   2. 标准化（Standardization）
+#标准化指的是将数据转换为均值为0，标准差为1的分布。这通过从每个观测中减去均值并除以标准差来实现
+DATA_standardized <- scale(DATA)
+#scale(x, center = TRUE, scale = TRUE)
+#x 是要进行标准化的数据。
+#center = TRUE 表示数据会先减去它的均值。
+#scale = TRUE 表示数据会除以它的标准差。
+
+#caret 包提供了更多高级的预处理功能。
+#使用 preProcess 函数进行规范化。
+library(caret)
+
+preProcValues <- preProcess(DATA, method = c("range"))
+preProcValues <- preProcess(DATA, method = c("center", "scale"))
+DATA_normalized <- predict(preProcValues, DATA)
+#preProcess(x, method)
+#x 是要处理的数据。
+#method = c("range") 指定使用范围规范化。
+#method = c("center", "scale") 指定使用数据中心化和标准化。
+
+library(dplyr)
+library(purrr)
+
+DATA_normalized <- DATA %>%
+  mutate_if(is.numeric, normalize)
+
+DATA_standardized <- DATA %>%
+  mutate_if(is.numeric, scale)
+
+```
+
+## Create Variables for Generalising several similar columns基于现有特征创建新特征
+
+```{r}
+#   1. 基本计算
+#可以直接使用 R 的基础算术运算符（如 +, -, *, /）来创建新变量。
+DATA$new_var = DATA$var1 + DATA$var2
+
+#   2. 使用 dplyr 的 mutate 函数
+#dplyr 包的 mutate 函数非常适合在数据框中添加新列或修改现有列。
+library(dplyr)
+DATA <- DATA %>% 
+  mutate(new_var = var1 / var2)
+
+#   3. 条件语句
+#使用 ifelse 函数或 dplyr 的 case_when 函数基于条件创建新变量。
+DATA$new_var = ifelse(DATA$var1 > threshold, value_if_true, value_if_false)
+
+DATA <- DATA %>% 
+  mutate(new_var = case_when(
+  condition1 ~ value1,
+  condition2 ~ value2,
+  TRUE ~ default_value
+))
+
+#   4. 日期和时间变量
+#使用 lubridate 包来处理和创建基于日期和时间的派生变量。
+
+library(lubridate)
+DATA$year <- year(DATA$date_var)
+DATA$month <- month(DATA$date_var)
+
+#   5. 文本处理
+#使用 stringr 包处理字符串数据，创建基于文本的派生变量。
+library(stringr)
+DATA$new_var = str_sub(DATA$text_var, 1, 5)  # 提取字符串前五个字符
+
+#   6. 分类变量编码
+#使用 factor 或 dplyr 的 mutate 与 as.factor 来创建或修改分类变量
+DATA$new_var = as.factor(DATA$var1)
+DATA <- DATA %>% 
+  mutate(new_var = as.factor(var1))
+
+#   7. 数值转换和标准化
+#使用 scale 函数对数值变量进行标准化。
+DATA$new_var = scale(DATA$var1, center = TRUE, scale = TRUE)
+
+#   8. 汇总统计
+#使用 dplyr 的 group_by 和 summarize 来创建基于组的派生变量。
+DATA_summary <- DATA %>% 
+  group_by(group_var) %>% 
+  summarize(mean_var = mean(var1, na.rm = TRUE))
+
+#   9. 使用数学和统计函数
+#R 提供了大量的数学和统计函数，如 log, exp, mean, median 等。
+DATA$log_var = log(DATA$var1)
+```
+
+# Regression Modelling 建立模型
+
+## Spatial Baseline Model建立空间基线模型
+
+Establishing a spatial baseline model typically refers to creating a basic regression model that accounts for spatial variability. This model serves as a benchmark for comparison, allowing the evaluation of the GWR model or other spatial models against non-spatial models, like ordinary least squares regression. The spatial baseline model usually includes variables relevant to the study but does not incorporate treatments for spatial variability, thus providing a clear view of the model's performance changes after introducing the spatial dimension.
+```{r}
+# 在深入调整模型之前，建立一个空间基线模型，以了解空间变量对因变量的基本影响
+
+```
+
+## Training set and Testing set 数据分割
+
+```{r}
+#如果适用，将数据分割为训练集和测试集，考虑到空间数据的特殊性。
+```
+
+## Model Applying
+
+```{r}
+
+
+```
+
+# 模型评估与调整
+
+## 交叉验证
+
+```{r}
+# 使用K折交叉验证来评估模型性能的稳定性。 性能指标：如均方误差（MSE）、决定系数（R²）等。
+```
+
+## 调整超参数
+
+```{r}
+#使用网格搜索（Grid Search）或随机搜索（Random Search）来找到最佳参数。
+```
+
+## 残差分析
+
+```{r}
+#特别在回归模型中，检查残差是否呈现随机分布。 
+```
+
+# Conclusion
+
+## Summary
+
+## Research Limitation
