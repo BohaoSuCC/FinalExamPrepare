@@ -9,14 +9,7 @@ output:
     toc: TRUE
     number_sections: TRUE
     toc_depth: 2
-header-includes:
-  - \usepackage{setspace}
-  - \setstretch{1.5}
-  - \usepackage{fontspec}
-  - \setmainfont{Spectral}
-  - \setsansfont{Roboto}
-  - \setmonofont{JetBrainsMono-Regular}
-geometry: "top=25mm, left=40mm, right=30mm, bottom=25mm, heightrounded"
+geometry: "top=25mm, left=30mm, right=30mm, bottom=25mm, heightrounded"
 linkcolor: blue
 highlight-style: github
 bibliography: "reference.bib"
@@ -70,7 +63,7 @@ library(tmaptools)
 
 ## Research Question:
 
-ccclx. What are the factors that might lead to variation in Average GCSE point scores across the city?
+-   What are the factors that might lead to variation in Average GCSE point scores across the city?
 
 ## Hypothesis:
 
@@ -80,20 +73,28 @@ ccclx. What are the factors that might lead to variation in Average GCSE point s
 ## Methodology:
 
 1.  The first step is always cleaning and pre-processing data, which is the foundation for any kinds of analysis and modelling.
+
 2.  Exploration Data Analysis(histograms and Q-Q plots for statistical information, KDE for spatial distribution, DBSCAN for spatial clustering, etc.) need to be done both for non-spatial and spatial fields. This step would clarify the simple relationship and some features inside the data.
+
 3.  Based on research purpose, the regression model also needs two important prerequisite to guarantee its adaptability and rationality.
     -   The first one is "The xxxxxx's happening does have summarizable and discernible spatial distribution characteristics and spatial patterns." This indicates whether a spatial analysis rather than purely quantitative analysis should be utilized to address the research question. Hence, Spatial patterns analysis like KDE or DBSCAN should be operated to check whether there is random occurrences for the xxxxxxxxxxx or not. If the result is complete random distribution, I'll just do the basic quantitative analysis based on the non-spatial data.
     -   The second one is "Spatial location information does play as a crucial and indispensable variable when building regression models." This means which regression model should be utilized to analysis and predict the xxxxxxx. I suppose spatial autocorrelation methods should be used to examine the adaptability of Tobler's Law.[@tobler_computer_1970] If there is no evidence showing geographical elements does affect the dependant variables distribution, then linear regression model or polynomial regression model should be the options. Otherwise, we should consider spatial information and select spatial regression models like spatial lag and spatial error models or geographically weighted regression models.
+  
 4.  Afterwards, some advanced filtering or merging should be operated based on the ESDA, after which some cleansed columns and features could be extracted from the raw data and regarded as the independent variables for regression model to test the hypothesis. The variables selection process should also take some background context and research purpose into consideration.
+
 5.  Then, modelling part should be emphasized on which model should be selected. Regression Model selection will refer to all above previous analysis and prerequisites. After establishing a baseline model, the focus shifts to evaluating and refining this model. This involves comparing the baseline model's performance against the spatial models, using metrics such as R-squared, AIC, or RMSE for validation and visualization. This process of model selection and refinement is central to achieving reliable and meaningful insights from the spatial analysis.
+
 6.  At the End, all results and features would be generalized and summarized, and a primary research conclusion will be drawn towards the initial question.
 
 ## Potential Limitation of data and methods
+
 -   Data Limitation[@goodchild_gis_2009]
 -   
 
 ## RMD environment configuration
+
 -   Download .bib and .csl file remotely for reference
+
 ```{r Download_bib_csl, echo=TRUE, results='hide'}
 
 #'hide': 这意味着代码块的结果不会在最终文档中显示。代码执行了，但产生的结果（输出）是不可见的。
@@ -112,6 +113,7 @@ download.file("https://raw.githubusercontent.com/BohaoSuCC/CASA0005BohaoSu/main/
 ```
 
 -   Create Data Folder
+
 ```{r Directory_Folder, warning=FALSE, message=FALSE}
 # create the folder storing data for a better robust
 folder_name <- "Data"
@@ -253,7 +255,7 @@ sf_DATA_transformed <- st_transform(sf_DATA, crs = 32650)
 
 ## Dealing with NAs in spatial and non-spatial dataset
 
-```{r Deal_NA_nonspatial}
+```{r Deal_NA_nonspatial, results='markup'}
 # na.omit(): 从数据中删除含有 NA 的行。
 # 参数：object（数据对象）。
 # 默认参数：无默认参数。
@@ -379,12 +381,6 @@ DATA_cleaned <- unique(DATA)
 BluePlaques <- distinct(BluePlaques)
 ```
 
-## Check Geometric Integrity of Spatial Objects确保空间对象的几何完整性，处理可能存在的几何错误。
-
-```{r}
-
-```
-
 ## DATA Integration 数据整合
 
 ```{r}
@@ -408,7 +404,7 @@ result <- st_join(x, y, op = st_intersects)
 
 ## Distribution and coorelationship单个图
 
-```{r}
+```{r, results='hold'}
 # 绘制var1的直方图
 ggplot(data, aes(x = var1)) + 
   geom_histogram(binwidth = 1, fill = "blue", color = "black")
@@ -501,6 +497,8 @@ ggplot(df, aes(x = longitude, y = latitude)) +
   theme_minimal()
 ```
 
+-   From the Heatmaps plot we could see xxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 ```{r KDE}
 ggplot(df, aes(x = longitude, y = latitude)) + 
   stat_density_2d(aes(fill = ..level..), geom = "polygon") + 
@@ -509,12 +507,37 @@ ggplot(df, aes(x = longitude, y = latitude)) +
   theme_minimal()
 ```
 
--   From the scatter plot we
+-   From the KDE plot we could see xxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ## Spatial Patterns 查看空间模式（如聚集、离散）
 
+
 ```{r}
 
+#create a sp object
+BluePlaquesSub<- BluePlaquesSub %>%
+  as(., 'Spatial')
+
+#create a ppp object
+BluePlaquesSub.ppp <- ppp(x=BluePlaquesSub@coords[,1],
+                          y=BluePlaquesSub@coords[,2],
+                          window=window)
+
+#first extract the points from the spatial points data frame
+BluePlaquesSubPoints <- BluePlaquesSub %>%
+  coordinates(.)%>%
+  as.data.frame()
+
+#now run the DBSCAN analysis
+db <- BluePlaquesSubPoints %>%
+  fpc::dbscan(.,eps = 700, MinPts = 4)
+
+#now plot the results
+plot(db, BluePlaquesSubPoints, main = "DBSCAN Output", frame = F)
+plot(BoroughMap$geometry, add=T)
+
+BluePlaquesSubPoints%>%
+  dbscan::kNNdistplot(.,k=4)
 
 ```
 
@@ -634,6 +657,7 @@ DATA$log_var = log(DATA$var1)
 ## Spatial Baseline Model建立空间基线模型
 
 Establishing a spatial baseline model typically refers to creating a basic regression model that accounts for spatial variability. This model serves as a benchmark for comparison, allowing the evaluation of the GWR model or other spatial models against non-spatial models, like ordinary least squares regression. The spatial baseline model usually includes variables relevant to the study but does not incorporate treatments for spatial variability, thus providing a clear view of the model's performance changes after introducing the spatial dimension.
+
 ```{r}
 # 在深入调整模型之前，建立一个空间基线模型，以了解空间变量对因变量的基本影响
 
@@ -677,3 +701,8 @@ Establishing a spatial baseline model typically refers to creating a basic regre
 ## Summary
 
 ## Research Limitation
+
+## Future Research
+
+-   Geography Detector 地理探测器
+-   
