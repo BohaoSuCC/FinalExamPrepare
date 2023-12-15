@@ -42,6 +42,7 @@ library(ggplot2)
 library(ggmap)
 library(here)
 library(janitor)
+library(lmtest)
 library(maptools)
 library(mapview)
 library(OpenStreetMap)
@@ -56,6 +57,7 @@ library(RSQLite)
 library(rgeos)
 library(sf)
 library(sp)
+library(spatialreg)
 library(spatstat)
 library(spdep)
 library(stringr)
@@ -791,13 +793,6 @@ plot(LWard_nb, st_geometry(coordsW), col="red")
 #add a map underneath
 plot(points_sf_joined$geometry, add=T)
 
-
-#create a spatial weights matrix from these weights
-# and choose the S 
-Lward.lw <- LWard_nb %>%
-  nb2mat(., style="S")
-
-
 #Moran's I requires the spatial weight list type object as opposed to matrix
 Lward.lw <- LWard_nb %>%
   nb2listw(., style="C")
@@ -818,7 +813,7 @@ I_LWard_Global_Density
 The Moran's I statistic is xxxxxxxxx. which means xxxxxxxxxxxxxxxxxxx. These results are significant for xxxxxxxxxxxx, as they provide insights into the spatial dependence and help in xxxxxxxxxxxx. Additionally, this could be very important for selecting the proper regression model, about whether we should take the spatial features into consideration in regression model.
 
 
-# Variables Selection 特征选择与工程
+# Variables Selection 特征选择
 
 ## Selecting Independent Variables based on ESDA and Research Question
 
@@ -941,9 +936,31 @@ Based on previous exploratory data analysis, I will use the following variables 
 
 Also, 
 
+```{r SpatialLaggedRegression}
+
+#Original Spatial Lagged regression Model
+model2 <- lm(average_gcse_capped_point_scores_2014 ~ unauthorised_absence_in_all_schools_percent_2013 + 
+               log(median_house_price_2014), data = LonWardProfiles)
+
+tidy(model2)
+
+#queen’s case weights matrix
+slag_dv_model2_queen <- lagsarlm(average_gcse_capped_point_scores_2014 ~ unauthorised_absence_in_all_schools_percent_2013 + 
+               log(median_house_price_2014), 
+               data = LonWardProfiles, 
+               nb2listw(LWard_nb, style="C"), 
+               method = "eigen")
+
+#what do the outputs show?
+tidy(slag_dv_model2_queen)
+```
+
+
+
 ```{r}
-
-
+#glance() gives model stats but this need something produced from a linear model
+#here we have used lagsarlm()
+glance(slag_dv_model2_queen)
 ```
 
 ## 模型评估与调整
@@ -984,8 +1001,6 @@ ggplot(df, aes(sample = sample)) +
 
 
 ## Research Limitation
-
-
 
 
 ```{r}
