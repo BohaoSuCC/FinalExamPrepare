@@ -29,8 +29,10 @@ knitr::opts_chunk$set(echo = TRUE,
 ```{r Packages_Loading,collapse = TRUE,echo=TRUE,eval = TRUE}
 library(broom)
 library(car)
+library(caret)
 library(classInt)
 library(corrplot)
+library(corrr)
 library(crosstalk)
 library(DiagrammeR)
 library(dplyr)
@@ -45,6 +47,7 @@ library(mapview)
 library(OpenStreetMap)
 library(patchwork)
 library(plotly)
+library(purrr)
 library(RColorBrewer)
 library(readr)
 library(rJava)
@@ -79,7 +82,7 @@ library(tmaptools)
 3.  Based on research purpose, the regression model also needs two important prerequisite to guarantee its adaptability and rationality.
 
   -   The first one is "The xxxxxx's happening does have summarizable and discernible spatial distribution characteristics and spatial patterns." This indicates whether a spatial analysis rather than purely quantitative analysis should be utilized to address the research question. Hence, Spatial patterns analysis like KDE or DBSCAN should be operated to check whether there is random occurrences for the xxxxxxxxxxx or not. If the result is complete random distribution, I'll just do the basic quantitative analysis based on the non-spatial data.
-  -   The second one is "Spatial location information does play as a crucial and indispensable variable when building regression models." This means which regression model should be utilized to analysis and predict the xxxxxxx. I suppose spatial autocorrelation methods should be used to examine the adaptability of Tobler's Law.[@tobler_computer_1970] If there is no evidence showing geographical elements does affect the dependant variables distribution, then linear regression model or polynomial regression model should be the options. Otherwise, we should consider spatial information and select spatial regression models like spatial lag and spatial error models or geographically weighted regression models.
+  -   The second one is "Spatial location information does play as a crucial and indispensable variable when building regression models." This means which regression model should be utilized to analysis and predict the xxxxxxx. I suppose spatial autocorrelation methods should be used to examine the adaptability of Tobler's Law.[@tobler_computer_1970] If there is no evidence showing geographical elements does affect the dependant variables distribution, then linear regression model or polynomial regression model should be the options. Otherwise, we should consider spatial information and select spatial regression models like spatial lag model, spatial error model or geographically weighted regression models.
 
 4.  Afterwards, some advanced filtering or merging should be operated based on the ESDA, after which some cleansed columns and features could be extracted from the raw data and regarded as the independent variables for regression model to test the hypothesis. The variables selection process should also take some background context and research purpose into consideration.
 
@@ -141,6 +144,38 @@ if (!dir.exists(folder_path)) {
 
 ```
 
+-   Define Functions
+
+```{r DefineFunction_Normalization}
+# define a function to standardize dataframe
+normalize_data <- function(df, columns, method = "standardize") {
+  # 确保提供的列存在于DataFrame中
+  if (!all(columns %in% names(df))) {
+    stop("Some columns not found in the dataframe")
+  }
+
+  # 对每个指定的列进行处理
+  for (col in columns) {
+    # 确保列是数值类型
+    if (!is.numeric(df[[col]])) {
+      stop("Non-numeric column detected: ", col)
+    }
+
+    # 标准化处理
+    if (method == "standardize") {
+      df[[col]] <- (df[[col]] - mean(df[[col]], na.rm = TRUE)) / sd(df[[col]], na.rm = TRUE)
+    }
+    # 归一化处理
+    else if (method == "normalize") {
+      df[[col]] <- (df[[col]] - min(df[[col]], na.rm = TRUE)) / (max(df[[col]], na.rm = TRUE) - min(df[[col]], na.rm = TRUE))
+    }
+    else {
+      stop("Invalid method. Choose 'standardize' or 'normalize'.")
+    }
+  }
+  return(df)
+}
+```
 # Data Introduction
 
 ## Downloading, Unzipping and loading the data
@@ -261,6 +296,18 @@ sf_DATA_transformed <- st_transform(sf_DATA, crs = 32650)
 
 # Data Cleaning and Processing 
 
+## Data Column Format Normalization 数据格式标准化
+First of all, I think it is necessary to do some data columns' format normalization, which means to make sure all the columns' names are in the same format as camel case. This could make the data more readable and easier to be processed.
+```{r}
+#use Janitor to clean the column's names
+A <- clean_names(A, case_type="camel")
+#str_trim(): 去除文本两侧的空格（stringr 包）。
+#参数：string（输入文本），side（修剪的方向）。
+#默认参数：side = "both"。
+DATA$column <- str_trim(DATA$column)
+
+```
+
 ## Dealing with NAs in spatial and non-spatial dataset
 
 Some columns, such as xxxxxxxxxx, are extremely important that we couldn't extract any useful information if there are NA values. Besides, its high accuracy makes it harder to fill missing values, which leads us to nothing else but to drop them. Some of the columns, such like xxxx and some categorical data, we also could classify all the NA values as a new category. Some columns like xxxxxxxxxx, we could assume, based on the context of the study and common sense, that the missing values are 0. Although this approach may introduce some degree of inaccuracy, it is considered a practical solution since the proportion of NA values in these columns is very high. Therefore, dropping these columns outright would be an unwise decision.
@@ -357,26 +404,6 @@ tm_shape(BoroughMap) +
   tm_polygons(col = NA, alpha = 0.5) +
 tm_shape(BluePlaquesSub) +
   tm_dots(col = "blue")
-
-```
-
-## Data Format Normalization 数据格式标准化
-
-```{r}
-#tolower(): 将文本转换为小写。
-#参数：x（输入文本）。
-#默认参数：无默认参数。
-DATA$column <- tolower(DATA$column)
-
-#toupper(): 将文本转换为大写。
-#参数：x（输入文本）。
-#默认参数：无默认参数。
-DATA$column <- toupper(DATA$column)
-
-#str_trim(): 去除文本两侧的空格（stringr 包）。
-#参数：string（输入文本），side（修剪的方向）。
-#默认参数：side = "both"。
-DATA$column <- str_trim(DATA$column)
 
 ```
 
@@ -587,8 +614,6 @@ Therefore, DBSCAN may be preferred in scenarios involving distinct clusters, irr
 
 Before proceeding with the DBSCAN clustering analysis, I first utilize the KNNdistplot (k-nearest neighbors distance plot), which is extremely crucial for determining the parameters for the DBSCAN clustering algorithm, especially the eps and minPts parameters. The KNNdistplot could identify the density distribution among data points, thereby xxxxxxxxxxxxx. Based on this plot, I can select an appropriate eps value, which represents the maximum distance for points to be considered as neighbors, and moving on to the DBSCAN for clustering analysis.
 
-“在进行聚类分析之前，我首先利用KNNdistplot（k-最近邻距离图）来计算 __________。这一步骤对于确定DBSCAN聚类算法的参数，特别是eps和minPts参数至关重要。KNNdistplot帮助我们识别数据点间的密度分布，从而 __________。根据这个图表，我可以选择一个合适的 eps 值，该值表示点被认为是彼此邻近的最大距离，以及 __________。”
-
 ```{r}
 
 #create a sp object
@@ -697,75 +722,115 @@ The spatial autocorrelation analysis indicates whether the spatial distribution 
 
 ### Which method for spatial autocorrelation?
 
-There are several spatial autocorrelation methods such as Global Moran's I[@moran_notes_1950], Local Moran's I[@anselin_local_1995], Geary's C[@geary_contiguity_1954], and Getis-Ord[@ord_local_1995]. And I believe most suitable method depends on the comparing process between research objectives and methods' principles, advantages/disadvantages and applicability.
+There are several spatial autocorrelation methods such as Global Moran's I[@moran_notes_1950], Local Moran's I[@anselin_local_1995], Geary's C[@geary_contiguity_1954], and Getis-Ord[@ord_local_1995]. And I believe most suitable method depends on the comparing process between research objectives and methods' principles, advantages/disadvantages and applicability. The local Moran's I and Getis-Ord are usually more adaptable to some local analysis, easier to identify local hotspots, coldspots, or spatial anomalies[@abdulhafedh_novel_2017]. 
 
-The local Moran's I and Getis-Ord are usually more adaptable to some local analysis, easier to identify local hotspots, coldspots, or spatial anomalies[@abdulhafedh_novel_2017]. While my research goal at this step is to examine the existence of spatial autocorrelation in a global view, plus that Geary's C focuses more on measuring similarity between values in neighboring areas. Therefore, I choose Global Moran's I for the spaital autocorrelation analysis.
+While my research goal at this step contains two aspects, one is to examine the existence of spatial autocorrelation in a global view, plus that Geary's C focuses more on measuring similarity between values in neighboring areas. Therefore, I choose Global Moran's I for the spaital autocorrelation analysis.
+
+However, Local Moran's I would also be helpful to determine which model to use. Due to the research question's context ane ESDA, it seems that xxxxxxxx has the local variability or spatial heterogeneity in spatial data. So Local Moran's I would also be taken into consideration to see if GWR is more suitable than other models.
 
 
-### Which method for spatial autocorrelation?
+
+
+### Weight Matrix
 
 Before performing spatial autocorrelation regression analysis, constructing a weight matrix is a prerequisite. The weight matrix, which represents xxxxxxx, allows us to xxxxxxxx. From this matrix, we can infer xxxxxxxxx, which is instrumental in understanding the spatial relationships among the observations."
 
-```{r}
+```{r ManipulationForWeightMatrix}
+
+# 点放到边界里
+example<-st_intersects(BoroughMap, PointsdataSub)
+
+
+
+# length of each list per polygon and add this as new column
+points_sf_joined <- LondonWardsMerged%>%
+  mutate(n = lengths(st_intersects(., BluePlaquesSub)))%>%
+  janitor::clean_names()%>%
+  #calculate area
+  mutate(area=st_area(.))%>%
+  #then density of the points per ward
+  mutate(density=n/area)%>%
+  #select density and some other variables 
+  dplyr::select(density, ward_name, gss_code, n, average_gcse_capped_point_scores_2014)
+
+
+points_sf_joined<- points_sf_joined %>%                    
+  group_by(gss_code) %>%         
+  summarise(density = first(density),
+          wardname= first(ward_name),
+          plaquecount= first(n))
+
+# plot the map
+tm_shape(points_sf_joined) +
+    tm_polygons("density",
+        style="jenks",
+        palette="PuOr",
+        midpoint=NA,
+        popup.vars=c("wardname", "density"),
+        title="Blue Plaque Density")
 
 
 ```
 
-The interpretation of spatial autocorrelation regression analysis involves xxxxxxxxxxxxx. Key metrics such as Moran's I or Geary's C indicate xxxxxxxxxxx. These results are significant for xxxxxxxxxxxx, as they provide insights into the spatial dependence and help in xxxxxxxxxxxx.
+```{r Weight Matrix}
+#First calculate the centroids of all Wards in London
 
-This could be very important for selecting the proper regression model, about whether we should take the spatial features into consideration in regression model.
+coordsW <- points_sf_joined%>%
+  st_centroid()%>%
+  st_geometry()
+  
+plot(coordsW,axes=TRUE)
+
+
+#create a neighbours list
+LWard_nb <- points_sf_joined %>%
+  poly2nb(., queen=T)
+
+#plot them
+plot(LWard_nb, st_geometry(coordsW), col="red")
+#add a map underneath
+plot(points_sf_joined$geometry, add=T)
+
+
+#create a spatial weights matrix from these weights
+# and choose the S 
+Lward.lw <- LWard_nb %>%
+  nb2mat(., style="S")
+
+
+#Moran's I requires the spatial weight list type object as opposed to matrix
+Lward.lw <- LWard_nb %>%
+  nb2listw(., style="C")
+```
+
+### Autocorrelation
+Now we have defined our matrix, we can calculate the Moran’s I and other associated statistics.
+
+```{r SpatialAutocorrelation}
+I_LWard_Global_Density <- points_sf_joined %>%
+  pull(density) %>%
+  as.vector()%>%
+  moran.test(., Lward.lw)
+
+I_LWard_Global_Density
+```
+
+The Moran's I statistic is xxxxxxxxx. which means xxxxxxxxxxxxxxxxxxx. These results are significant for xxxxxxxxxxxx, as they provide insights into the spatial dependence and help in xxxxxxxxxxxx. Additionally, this could be very important for selecting the proper regression model, about whether we should take the spatial features into consideration in regression model.
 
 
 # Variables Selection 特征选择与工程
 
 ## Selecting Independent Variables based on ESDA and Research Question
 
-统计方法：例如使用相关系数或卡方检验来识别与目标变量最相关的特征。 模型基方法：如使用随机森林或LASSO回归进行特征重要性评估。 递归特征消除：这是一种利用模型精度来选择特征的方法。 特征工程：转换和创建新特征来改善模型的性能。常见的做法包括：
+-   The first step is to select independent variables based on ESDA and research question. 
 
-## DATA Normalization and Standardlization 数据规范化与标准化
+Considering that there is no enough time do the all the ESDA for all the variables, I will select some variables mainly based on the simple correlation linearship analysis and some mechanism explanation towards the question.
 
-```{r}
-# 数据规范化
-normalize <- function(x) {
-  return ((x - min(x)) / (max(x) - min(x)))
-}
+-   Create Variables for Generalizing several similar columns基于现有特征创建新特征
 
-DATA_normalized <- as.DATA.frame(lapply(DATA, normalize))
+Besides, there are also some variables that are similar to each other, and I will create new variables to generalize them, which would also be helpful for preventing the potential multicollinearity problem.
 
-#   2. 标准化（Standardization）
-#标准化指的是将数据转换为均值为0，标准差为1的分布。这通过从每个观测中减去均值并除以标准差来实现
-DATA_standardized <- scale(DATA)
-#scale(x, center = TRUE, scale = TRUE)
-#x 是要进行标准化的数据。
-#center = TRUE 表示数据会先减去它的均值。
-#scale = TRUE 表示数据会除以它的标准差。
-
-#caret 包提供了更多高级的预处理功能。
-#使用 preProcess 函数进行规范化。
-library(caret)
-
-preProcValues <- preProcess(DATA, method = c("range"))
-preProcValues <- preProcess(DATA, method = c("center", "scale"))
-DATA_normalized <- predict(preProcValues, DATA)
-#preProcess(x, method)
-#x 是要处理的数据。
-#method = c("range") 指定使用范围规范化。
-#method = c("center", "scale") 指定使用数据中心化和标准化。
-
-library(dplyr)
-library(purrr)
-
-DATA_normalized <- DATA %>%
-  mutate_if(is.numeric, normalize)
-
-DATA_standardized <- DATA %>%
-  mutate_if(is.numeric, scale)
-
-```
-
-## Create Variables for Generalising several similar columns基于现有特征创建新特征
-
-```{r}
+```{r Creating_var}
 #   1. 基本计算
 #可以直接使用 R 的基础算术运算符（如 +, -, *, /）来创建新变量。
 DATA$new_var = DATA$var1 + DATA$var2
@@ -820,46 +885,70 @@ DATA_summary <- DATA %>%
 DATA$log_var = log(DATA$var1)
 ```
 
+
+
+## DATA Normalization and Standardlization 数据规范化与标准化
+-   which variables should be transformed? Here I use the Tukey’s ladder of transformations to decide which variables should be transformed. I must admit that I don't have the insightful understanding of transforming variables, and I just follow the rules of thumb and do the simple transformations as the following codes.
+
+```{r Tukey’s ladder of transformations}
+#Tukey’s ladder of transformations
+#
+symbox(~median_house_price_2014,    
+       LonWardProfiles,            
+       na.rm=T,                   
+       powers=seq(-3,3,by=.5))     
+
+```
+
+```{r StandardizlationFromR}
+
+# 数据规范化
+DATA_normalized <- as.DATA.frame(lapply(DATA, normalize))
+
+#   2. 标准化（Standardization）
+#标准化指的是将数据转换为均值为0，标准差为1的分布。这通过从每个观测中减去均值并除以标准差来实现
+DATA_standardized <- scale(DATA)
+#scale(x, center = TRUE, scale = TRUE)
+#x 是要进行标准化的数据。
+#center = TRUE 表示数据会先减去它的均值。
+#scale = TRUE 表示数据会除以它的标准差。
+
+#caret 包提供了更多高级的预处理功能。
+#使用 preProcess 函数进行规范化。
+
+preProcValues <- preProcess(DATA, method = c("range"))
+preProcValues <- preProcess(DATA, method = c("center", "scale"))
+DATA_normalized <- predict(preProcValues, DATA)
+#preProcess(x, method)
+#x 是要处理的数据。
+#method = c("range") 指定使用范围规范化。
+#method = c("center", "scale") 指定使用数据中心化和标准化。
+
+DATA_normalized <- DATA %>%
+  mutate_if(is.numeric, normalize)
+
+DATA_standardized <- DATA %>%
+  mutate_if(is.numeric, scale)
+
+```
+
 # Regression Modelling 建立模型
 
-## Spatial Baseline Model建立空间基线模型
+## Model Selection 模型选择
 
-Establishing a spatial baseline model typically refers to creating a basic regression model that accounts for spatial variability. This model serves as a benchmark for comparison, allowing the evaluation of the GWR model or other spatial models against non-spatial models, like ordinary least squares regression. The spatial baseline model usually includes variables relevant to the study but does not incorporate treatments for spatial variability, thus providing a clear view of the model's performance changes after introducing the spatial dimension.
+Based on previous exploratory data analysis, I will use the following variables to build the regression models.
+"xxxxxxxxx", "xxxxxxxxxx", "xxxxxxxx", "xxxxxxx", "xxxxxxxxxxxxx"
 
-```{r}
-# 在深入调整模型之前，建立一个空间基线模型，以了解空间变量对因变量的基本影响
-
-```
-
-## Training set and Testing set 数据分割
-
-```{r}
-#如果适用，将数据分割为训练集和测试集，考虑到空间数据的特殊性。
-```
-
-## Model Applying
+Also, 
 
 ```{r}
 
 
 ```
 
-# 模型评估与调整
+## 模型评估与调整
 
-## 交叉验证
-
-```{r}
-# 使用K折交叉验证来评估模型性能的稳定性。 性能指标：如均方误差（MSE）、决定系数（R²）等。
-```
-
-## 调整超参数
-
-```{r}
-#使用网格搜索（Grid Search）或随机搜索（Random Search）来找到最佳参数。
-```
-
-## Residuals Analysis 残差分析
-
+### Residuals Analysis 残差分析
 
 In spatial regression models, ensuring that residuals are normally distributed is important because many statistical inferences (like tests for the significance of parameters) are based on the assumption of normality. If residuals are not normally distributed, this can affect the reliability of the model and the validity of the conclusions. Therefore, using a Q-Q plot to examine the normality of residuals in spatial regression models is a crucial step in model diagnostics.
 
@@ -888,11 +977,22 @@ ggplot(df, aes(sample = sample)) +
 
 # Conclusion
 
+
+
 ## Summary
+
+
 
 ## Research Limitation
 
+
+
+
+```{r}
+#使用网格搜索（Grid Search）或随机搜索（Random Search）来找到最佳参数。
+```
+
+
 ## Future Research
 
--   Geography Detector 地理探测器
--   
+-   Future steps for model optimization. 交叉验证调整超参数
