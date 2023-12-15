@@ -78,8 +78,8 @@ library(tmaptools)
 
 3.  Based on research purpose, the regression model also needs two important prerequisite to guarantee its adaptability and rationality.
 
-    -   The first one is "The xxxxxx's happening does have summarizable and discernible spatial distribution characteristics and spatial patterns." This indicates whether a spatial analysis rather than purely quantitative analysis should be utilized to address the research question. Hence, Spatial patterns analysis like KDE or DBSCAN should be operated to check whether there is random occurrences for the xxxxxxxxxxx or not. If the result is complete random distribution, I'll just do the basic quantitative analysis based on the non-spatial data.
-    -   The second one is "Spatial location information does play as a crucial and indispensable variable when building regression models." This means which regression model should be utilized to analysis and predict the xxxxxxx. I suppose spatial autocorrelation methods should be used to examine the adaptability of Tobler's Law.[@tobler_computer_1970] If there is no evidence showing geographical elements does affect the dependant variables distribution, then linear regression model or polynomial regression model should be the options. Otherwise, we should consider spatial information and select spatial regression models like spatial lag and spatial error models or geographically weighted regression models.
+  -   The first one is "The xxxxxx's happening does have summarizable and discernible spatial distribution characteristics and spatial patterns." This indicates whether a spatial analysis rather than purely quantitative analysis should be utilized to address the research question. Hence, Spatial patterns analysis like KDE or DBSCAN should be operated to check whether there is random occurrences for the xxxxxxxxxxx or not. If the result is complete random distribution, I'll just do the basic quantitative analysis based on the non-spatial data.
+  -   The second one is "Spatial location information does play as a crucial and indispensable variable when building regression models." This means which regression model should be utilized to analysis and predict the xxxxxxx. I suppose spatial autocorrelation methods should be used to examine the adaptability of Tobler's Law.[@tobler_computer_1970] If there is no evidence showing geographical elements does affect the dependant variables distribution, then linear regression model or polynomial regression model should be the options. Otherwise, we should consider spatial information and select spatial regression models like spatial lag and spatial error models or geographically weighted regression models.
 
 4.  Afterwards, some advanced filtering or merging should be operated based on the ESDA, after which some cleansed columns and features could be extracted from the raw data and regarded as the independent variables for regression model to test the hypothesis. The variables selection process should also take some background context and research purpose into consideration.
 
@@ -244,7 +244,7 @@ Also, I am going to consider how to deal with those NA values with different sol
 
 ```{r}
 # transform the non-spatial data into spatial data based on columns'Longitude''Latitude'
-Airbnb <- read_csv("prac5_data/listings.csv") %>%
+Airbnb <- read_csv(here::here("listings.csv")) %>%
   st_as_sf(., coords = c("longitude", "latitude"), 
                    crs = 4326) %>%
     st_transform(., 27700)%>%
@@ -409,13 +409,68 @@ DATA_combined <- left_join(DATA1, DATA2, by = c('SAME_COLUMN_NAME'='SAME_COLUMN_
 # spatial data join。 Argument could be 
 result <- st_join(x, y, op = st_intersects)
 
+#plot the Pointsdata in the area
+tmap_mode("plot")
+tm_shape(BoroughMap) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(Pointsdata) +
+  tm_dots(col = "blue")
+
 ```
+
+
+```{r Set_Window}
+# select by attribute
+studyarea_window <- BoroughMap %>%
+  dplyr::filter(str_detect(GSS_CODE, "^E09"))
+
+#Check to see that the correct borough has been pulled out
+tm_shape(studyarea_window) +
+  tm_polygons(col = NA, alpha = 0.5)
+
+#clip the data to our single borough
+Pointsdata <- Pointsdata[studyarea_window,]
+#check that it's worked
+tmap_mode("plot")
+
+tm_shape(studyarea_window) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(Pointsdata) +
+  tm_dots(col = "blue")
+
+```
+
+```{r Create_ppp_object}
+# select by attribute
+studyarea_window <- BoroughMap %>%
+  dplyr::filter(str_detect(GSS_CODE, "^E09"))
+
+#Check to see that the correct borough has been pulled out
+tm_shape(studyarea_window) +
+  tm_polygons(col = NA, alpha = 0.5)
+
+#create a sp object
+BluePlaquesSub<- BluePlaquesSub %>%
+  as(., 'Spatial')
+
+# create the window from above studyarea_window
+window <- as.owin(studyarea_window)
+plot(window)
+
+#create a ppp object
+Pointsdata.ppp <- ppp(x=BluePlaquesSub$Longitude,
+                          y=BluePlaquesSub$Latitude,
+                          window=window)
+
+```
+
 
 # Exploration Spatial Data Analysis (ESDA)
 
 Exploration Spatial Data Analysis (ESDA) plays an significant role in spatial regression modeling, primarily focusing on three key aspects. 
 -   First part contains acquiring statistical characteristics and distribution patterns of all non-spatial data, providing a solid foundation for selecting relevant independent variables for the model. This step is crucial for understanding the underlying structure and relationships within the data. 
 -   Second part involves cluster analysis to ascertain if the data exhibits spatial clustering, indicating non-random distribution across the space. This analysis verifies one of the prerequisites for spatial regression modeling, ensuring the data's suitability for such analysis. 
+
 -   Another essential prerequisite will be checked in part3, which is the impact of geographical spatial differences on certain dependent variables in spatial data. This is accomplished by conducting spatial autocorrelation analysis, which helps to confirm if spatial factors significantly influence the variables in question, thereby validating the use of spatial regression techniques.
 
 ## Distribution and coorelationship
@@ -472,7 +527,7 @@ corrplot(cor_matrix, method = "circle")
 names(data_test)
 ```
 
-```{r, echo=TRUE,eval=FALSE, warning=FALSE}
+```{r, echo=TRUE,eval=TRUE, warning=FALSE}
 
 columns_name_datatest <- names(data_test)[c(13,14,15,16)]
 
@@ -488,10 +543,10 @@ for (i in 1:4) {
   pic <- ggplot(data_test, aes(x = !!sym(column_name))) + 
     geom_histogram(fill = "lightblue", color = "black") +
     ggtitle(paste("Histogram of", column_name)) +   #每个图的图名
-    xlab(paste("X-axis of", column_name)) +  # 设置X轴标题
+    xlab(paste("Values of", column_name)) +  # 设置X轴标题
     ylab("Frequency") +  # 设置Y轴标题为“频率”
     theme(
-      plot.title = element_text(size = 10),  # 设置图表标题字体大小
+      plot.title = element_text(size = 10, hjust=0.5),  # 设置图表标题字体大小
       axis.title.x = element_text(size = 8),  # 设置X轴标题字体大小
       axis.title.y = element_text(size = 8)   # 设置Y轴标题字体大小
     )
@@ -500,7 +555,7 @@ for (i in 1:4) {
 
 # using patchwork to combine every histograms into a 2*2 grids
 combined_plot <- wrap_plots(plots_list, ncol = 2) & 
-  theme(plot.title = element_text(size = 10),
+  theme(plot.title = element_text(size = 10, hjust=0.5),
     axis.title.x = element_text(size = 8),
     axis.title.y = element_text(size = 8)
   )
@@ -510,37 +565,29 @@ combined_plot
 
 ## Spatial Distribution 查看空间分布
 
-In order to understand the spatial distribution, I utilized Kernel Density Estimation (KDE) for its analysis. This method could provide with an in-depth examination of \_\_\_\_\_\_\_\_\_\_ (specific aspect or feature of the data), enabling a clearer visualization of spatial concentration and patterns within the study area. The KDE plot is particularly effective in highlighting areas of high density or clustering, which is essential for the analysis of \_\_\_\_\_\_\_\_\_\_ (specific phenomena or geographic feature).
-
-```{r Spatial_Scatter_plot}
-
-ggplot(DATAFRAME, aes(x = longitude, y = latitude)) + 
-  geom_point() + 
-  theme_minimal() + 
-  labs(x = "Longitude", y = "Latitude", title = "Spatial Scatter Plot")
-```
-
-```{r Spatial_Heatmaps}
-ggplot(df, aes(x = longitude, y = latitude)) + 
-  stat_density_2d(aes(fill = ..level..), geom = "polygon") + 
-  scale_fill_viridis_c() + 
-  labs(x = "Longitude", y = "Latitude", title = "Spatial Heatmap") +
-  theme_minimal()
-```
-
+In order to understand the spatial distribution, I utilized Kernel Density Estimation (KDE) for its analysis. This method could provide with an in-depth examination of xxxxxxxxxxxxxxxxxxxx (specific aspect or feature of the data), enabling a clearer visualization of spatial concentration and patterns within the study area. The KDE plot is particularly effective in highlighting areas of high density or clustering, which is essential for the analysis of xxxxxxxxxxxxxxxxxxxxxx (specific phenomena or geographic feature).
 -   From the Heatmaps plot we could see xxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ```{r KDE}
-ggplot(df, aes(x = longitude, y = latitude)) + 
-  stat_density_2d(aes(fill = ..level..), geom = "polygon") + 
-  scale_fill_viridis_c() + 
-  labs(x = "Longitude", y = "Latitude", title = "Spatial Heatmap") +
-  theme_minimal()
+Pointsdata.ppp %>%
+  density(., sigma=500) %>%
+  plot()
 ```
 
--   From the KDE (Kernel Density Estimation) plot, we can observe \_\_\_\_\_\_\_\_\_\_. This suggests that the distribution of data exhibits a trend of \_\_\_\_\_\_\_\_\_\_, which is crucial for understanding \_\_\_\_\_\_\_\_\_\_ (specific data characteristic or geographic feature). Particularly in the region of \_\_\_\_\_\_\_\_\_\_, this distribution provides key insights into \_\_\_\_\_\_\_\_\_\_ (a relevant phenomenon or issue)."
+-   From the KDE (Kernel Density Estimation) plot, we can observe xxxxxxxxxxxxxxxxx. This suggests that the distribution of data exhibits a trend of xxxxxxxxxxxxxxxxxxxxxxxxxxxxx, which is crucial for understanding xxxxxxxxxxxxxxxxxxxxxxx (specific data characteristic or geographic feature). Particularly in the region of xxxxxxxxxxxxxxxxxxx, this distribution provides key insights into xxxxxxxxxxxxxx (a relevant phenomenon or issue)."
 
 ## Spatial Patterns 查看空间模式（如聚集、离散）
+
+In spatial data analysis, identifying whether patterns are clustered or dispersed is crucial, which could also examine the prerequisite about Spatial distribution randomness. Two common methods for this analysis are Ripley's K function and DBSCAN. 
+
+-   Ripley's K function is adopted at quantifying spatial dependence over various scales, offering insights into how spatial processes change with distance. It excels in identifying spatial patterns at specific scales but requires careful handling of distance scales and edge effects. 
+-   On the other hand, DBSCAN (Density-Based Spatial Clustering of Applications with Noise) is a density-based clustering algorithm that identifies high-density regions as clusters while marking noise or isolated points. This method is particularly effective for complex or non-homogeneous spatial distributions due to its sensitivity to high-density areas and robustness against noise.While DBSCAN is sensitive to parameter settings, once the appropriate parameters are chosen, it can effectively highlight distinct clustering patterns in a more intuitive and easily interpretable manner. 
+
+Therefore, DBSCAN may be preferred in scenarios involving distinct clusters, irregular distributions, or significant noise in spatial data.
+
+Before proceeding with the DBSCAN clustering analysis, I first utilize the KNNdistplot (k-nearest neighbors distance plot), which is extremely crucial for determining the parameters for the DBSCAN clustering algorithm, especially the eps and minPts parameters. The KNNdistplot could identify the density distribution among data points, thereby xxxxxxxxxxxxx. Based on this plot, I can select an appropriate eps value, which represents the maximum distance for points to be considered as neighbors, and moving on to the DBSCAN for clustering analysis.
+
+“在进行聚类分析之前，我首先利用KNNdistplot（k-最近邻距离图）来计算 __________。这一步骤对于确定DBSCAN聚类算法的参数，特别是eps和minPts参数至关重要。KNNdistplot帮助我们识别数据点间的密度分布，从而 __________。根据这个图表，我可以选择一个合适的 eps 值，该值表示点被认为是彼此邻近的最大距离，以及 __________。”
 
 ```{r}
 
@@ -554,29 +601,120 @@ BluePlaquesSub.ppp <- ppp(x=BluePlaquesSub@coords[,1],
                           window=window)
 
 #first extract the points from the spatial points data frame
-BluePlaquesSubPoints <- BluePlaquesSub %>%
+PointsdataSub <- Pointsdata %>%
   coordinates(.)%>%
   as.data.frame()
 
+# check and find the proper eps and minpts by using kNNdistplot
+BluePlaquesSubPoints%>%
+  dbscan::kNNdistplot(.,k=4)
+```
+
+After conducting the DBSCAN clustering analysis, the results indicate xxxxxxxxxxxxxxxxxx, revealing spatial clustering patterns in the data. Each cluster represents xxxxxxxxxxxxxxxxxxxxx, while noise points (points not assigned to any cluster) may suggest xxxxxxxxxxxxxxxxxxx. These clusters help us identify xxxxxxxxxxxxxxxxxxxx, such as concentrated trends or anomaly patterns in specific areas. 
+```{r}
+
 #now run the DBSCAN analysis
-db <- BluePlaquesSubPoints %>%
+DBSCANoutput <- PointsdataSub %>%
   fpc::dbscan(.,eps = 700, MinPts = 4)
 
 #now plot the results
-plot(db, BluePlaquesSubPoints, main = "DBSCAN Output", frame = F)
+plot(DBSCANoutput, PointsdataSub, main = "DBSCAN Output", frame = F)
 plot(BoroughMap$geometry, add=T)
 
-BluePlaquesSubPoints%>%
-  dbscan::kNNdistplot(.,k=4)
+# add the DBSCAN result back to dataframe
+Pointsdata<- PointsdataSub %>%
+  mutate(dbcluster=DBSCANoutput$cluster)
+
+#create some convex hull polygons to wrap around the points in our clusters
+chulls <- PointsdataSub %>%
+  group_by(dbcluster) %>%
+  dplyr::mutate(hull = 1:n(),
+  hull = factor(hull, chull(coords.x1, coords.x2)))%>%
+  arrange(hull)
+
+#drop the cluster =0 out from the dataframe
+chulls <- chulls %>%
+  filter(dbcluster >=1)
+```
+
+
+```{r}
+#create a ggplot2 object from our data
+dboutput_plot <- ggplot(data=PointsdataSub, 
+                 aes(coords.x1,coords.x2, colour=dbcluster, fill=dbcluster)) 
+#add the points in
+dboutput_plot <- dboutput_plot + geom_point()
+#now the convex hulls
+dboutput_plot <- dboutput_plot + geom_polygon(data = chulls, 
+                                aes(coords.x1,coords.x2, group=dbcluster), 
+                                alpha = 0.5) 
+#now plot, setting the coordinates to scale correctly and as a black and white plot 
+#(just for the hell of it)...
+dbplot + theme_bw() + coord_equal()
 
 ```
 
+
+```{r OSMbasemap}
+
+###add a basemap
+##First get the bbox in lat long for Harrow
+HarrowWGSbb <- Harrow %>%
+  st_transform(., 4326)%>%
+  st_bbox()
+
+library(OpenStreetMap)
+# create  a basemap
+basemap <- OpenStreetMap::openmap(c(51.5549876,-0.4040502),c(51.6405356,-0.2671315),
+                         zoom=NULL,
+                         "osm")
+
+# convert the basemap to British National Grid
+basemap_bng <- openproj(basemap, projection="+init=epsg:27700")
+
+#autoplot(basemap_bng) sometimes works
+autoplot.OpenStreetMap(basemap_bng)+ 
+  geom_point(data=BluePlaquesSubPoints, 
+             aes(coords.x1,coords.x2, 
+                 colour=dbcluster, 
+                 fill=dbcluster)) + 
+  geom_polygon(data = chulls, 
+               aes(coords.x1,coords.x2, 
+                   group=dbcluster,
+                   fill=dbcluster), 
+               alpha = 0.5)  
+```
+
+Additionally, the characteristics and locations of these clusters can be used for xxxxxxxxxxxxxxxxxxx, providing crucial insights for a deeper understanding of potential geographic phenomena in the study area.
+
+
 ## Spatial Autocorrelation 空间自相关性
+
+-   Until now, I have checked the first prerequisite and prove that Data points' distribution do have certain patterns according to geographical information.
+-   The next step is to examine do data points' some columns(values) also have their special coorelation with geographical features?
+
+The spatial autocorrelation analysis indicates whether the spatial distribution of variables is random or exhibits spatial dependency. This is crucial for xxxxxxxxxx, as it helps in ensuring the accuracy and validity of the spatial regression model.
+
+### Which method for spatial autocorrelation?
+
+There are several spatial autocorrelation methods such as Global Moran's I[@moran_notes_1950], Local Moran's I[@anselin_local_1995], Geary's C[@geary_contiguity_1954], and Getis-Ord[@ord_local_1995]. And I believe most suitable method depends on the comparing process between research objectives and methods' principles, advantages/disadvantages and applicability.
+
+The local Moran's I and Getis-Ord are usually more adaptable to some local analysis, easier to identify local hotspots, coldspots, or spatial anomalies[@abdulhafedh_novel_2017]. While my research goal at this step is to examine the existence of spatial autocorrelation in a global view, plus that Geary's C focuses more on measuring similarity between values in neighboring areas. Therefore, I choose Global Moran's I for the spaital autocorrelation analysis.
+
+
+### Which method for spatial autocorrelation?
+
+Before performing spatial autocorrelation regression analysis, constructing a weight matrix is a prerequisite. The weight matrix, which represents xxxxxxx, allows us to xxxxxxxx. From this matrix, we can infer xxxxxxxxx, which is instrumental in understanding the spatial relationships among the observations."
 
 ```{r}
 
 
 ```
+
+The interpretation of spatial autocorrelation regression analysis involves xxxxxxxxxxxxx. Key metrics such as Moran's I or Geary's C indicate xxxxxxxxxxx. These results are significant for xxxxxxxxxxxx, as they provide insights into the spatial dependence and help in xxxxxxxxxxxx.
+
+This could be very important for selecting the proper regression model, about whether we should take the spatial features into consideration in regression model.
+
 
 # Variables Selection 特征选择与工程
 
